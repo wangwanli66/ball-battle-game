@@ -8,7 +8,19 @@ import { useGameEngine } from "./use-game-engine";
 export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pointerRef = useRef<PointerState>({ x: 0, y: 0, active: false });
-  const { actions, phase, score, rank, leaders, fragments } = useGameEngine(canvasRef, pointerRef);
+  const {
+    actions,
+    partyActions,
+    phase,
+    score,
+    rank,
+    leaders,
+    fragments,
+    boosting,
+    canBoost,
+    respawning,
+    party,
+  } = useGameEngine(canvasRef, pointerRef);
 
   const updatePointer = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -48,6 +60,14 @@ export default function Game() {
         rank={rank}
         leaders={leaders}
         fragments={fragments}
+        boosting={boosting}
+        canBoost={canBoost}
+        canControlMatch={party.role !== "guest"}
+        respawning={respawning}
+        party={party}
+        onCreateRoom={(name) => void partyActions.current.create(name)}
+        onJoinRoom={(request) => void partyActions.current.join(request)}
+        onLeaveRoom={() => partyActions.current.leave()}
       />
     </main>
   );

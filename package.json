@@ -2,13 +2,15 @@
   "name": "orbit-arena-game",
   "version": "1.0.0",
   "private": true,
-  "engines": { "node": ">=22.13.0" },
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
     "build:pages": "next build",
     "start": "vinext start",
-    "test": "node --test tests/game-core.test.mjs",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
@@ -16,7 +18,8 @@
     "drizzle-orm": "0.45.2",
     "next": "16.2.6",
     "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "react-dom": "19.2.6",
+    "trystero": "0.25.3"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",

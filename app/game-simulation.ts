@@ -1,6 +1,8 @@
 import {
+  BOOST_SPEED_MULTIPLIER,
   canConsume,
   clampToWorld,
+  consumeBoostMass,
   massFromRadius,
   mergedRadius,
   radiusFromMass,
@@ -9,16 +11,19 @@ import {
 import { makeFood, normalized, randomBetween, safeSpawn } from "./game-state";
 import type { Food, GameData, Orb, PointerState } from "./game-types";
 
-export function splitPlayer(game: GameData, pointer: PointerState) {
-  if (game.phase !== "playing" || game.elapsed - game.lastSplit < 0.55 || game.player.length >= 8) return false;
+export function splitPlayer(game: GameData, pointer: PointerState, owner = "player") {
+  const ownerCells = game.player.filter((cell) => cell.owner === owner);
+  const lastOwnerSplit = ownerCells.reduce((latest, cell) => Math.max(latest, cell.mergeAt - 8), -10);
+  if (game.phase !== "playing" || game.elapsed - lastOwnerSplit < 0.55 || ownerCells.length >= 8) return false;
   const aim = normalized(pointer.x, pointer.y);
   const direction = aim.x || aim.y ? aim : { x: 1, y: 0 };
   const newCells: Orb[] = [];
-  for (const cell of game.player) {
-    if (game.player.length + newCells.length >= 8 || cell.r < 25) continue;
+  for (const cell of ownerCells) {
+    if (ownerCells.length + newCells.length >= 8 || cell.r < 25) continue;
     const nextRadius = cell.r / Math.SQRT2;
     cell.r = nextRadius;
     cell.mergeAt = game.elapsed + 8;
+    cell.boosting = false;
     cell.impulseX -= direction.x * 45;
     cell.impulseY -= direction.y * 45;
     const launchDistance = nextRadius * 1.7;
@@ -38,12 +43,25 @@ export function splitPlayer(game: GameData, pointer: PointerState) {
   return true;
 }
 
-export function updatePlayer(game: GameData, pointer: PointerState, dt: number) {
+export function updatePlayer(
+  game: GameData,
+  pointer: PointerState,
+  dt: number,
+  owner = "player",
+  boostHeld = false,
+) {
+  const ownerCells = game.player.filter((cell) => cell.owner === owner);
   const aimLength = Math.hypot(pointer.x, pointer.y);
   const aim = aimLength > 14 ? normalized(pointer.x, pointer.y) : { x: 0, y: 0 };
-  for (const cell of game.player) {
+  const boost = boostHeld && (aim.x !== 0 || aim.y !== 0)
+    ? consumeBoostMass(ownerCells, dt)
+    : { consumed: 0, intensity: 0, available: 0 };
+  const speedMultiplier = 1 + (BOOST_SPEED_MULTIPLIER - 1) * boost.intensity;
+
+  for (const cell of ownerCells) {
+    cell.boosting = boost.intensity > 0;
     const damping = Math.exp(-5.2 * dt);
-    const speed = speedForRadius(cell.r);
+    const speed = speedForRadius(cell.r) * speedMultiplier;
     cell.x += (aim.x * speed + cell.impulseX) * dt;
     cell.y += (aim.y * speed + cell.impulseY) * dt;
     cell.impulseX *= damping;
@@ -51,10 +69,10 @@ export function updatePlayer(game: GameData, pointer: PointerState, dt: number) 
     clampToWorld(cell);
   }
 
-  for (let i = 0; i < game.player.length; i += 1) {
-    for (let j = i + 1; j < game.player.length; j += 1) {
-      const a = game.player[i];
-      const b = game.player[j];
+  for (let i = 0; i < ownerCells.length; i += 1) {
+    for (let j = i + 1; j < ownerCells.length; j += 1) {
+      const a = ownerCells[i];
+      const b = ownerCells[j];
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const distance = Math.max(0.01, Math.hypot(dx, dy));
@@ -80,11 +98,12 @@ export function updatePlayer(game: GameData, pointer: PointerState, dt: number) 
           larger.x = (larger.x + smaller.x) / 2;
           larger.y = (larger.y + smaller.y) / 2;
           game.player = game.player.filter((cell) => cell.id !== smaller.id);
-          return;
+          return boost.intensity > 0;
         }
       }
     }
   }
+  return boost.intensity > 0;
 }
 
 function chooseBotDirection(game: GameData, bot: Orb) {
@@ -134,6 +153,7 @@ function chooseBotDirection(game: GameData, bot: Orb) {
 
 export function updateBots(game: GameData, dt: number) {
   for (const bot of game.bots) {
+    bot.boosting = false;
     if (!bot.alive) {
       if (game.elapsed >= bot.respawnAt) {
         const point = safeSpawn(game, 21);
@@ -189,7 +209,7 @@ export function resolveOrbs(game: GameData) {
     for (let j = i + 1; j < entities.length; j += 1) {
       const a = entities[i];
       const b = entities[j];
-      if (a.owner === b.owner) continue;
+      if (a.owner === b.owner || (a.kind === "player" && b.kind === "player")) continue;
       if (canConsume(a, b)) {
         candidates.push({ predator: a, prey: b, depth: a.r - Math.hypot(a.x - b.x, a.y - b.y) });
       } else if (canConsume(b, a)) {
@@ -212,10 +232,11 @@ export function resolveOrbs(game: GameData) {
   return !game.player.length;
 }
 
-export function updateCamera(game: GameData, dt: number) {
-  if (!game.player.length) return;
-  const totalMass = game.player.reduce((sum, cell) => sum + massFromRadius(cell.r), 0);
-  const center = game.player.reduce(
+export function updateCamera(game: GameData, dt: number, owner = "player") {
+  const ownerCells = game.player.filter((cell) => cell.owner === owner);
+  if (!ownerCells.length) return;
+  const totalMass = ownerCells.reduce((sum, cell) => sum + massFromRadius(cell.r), 0);
+  const center = ownerCells.reduce(
     (acc, cell) => {
       const mass = massFromRadius(cell.r);
       acc.x += (cell.x * mass) / totalMass;

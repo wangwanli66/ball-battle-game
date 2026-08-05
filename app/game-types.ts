@@ -12,6 +12,7 @@ export type Orb = {
   r: number;
   color: string;
   alive: boolean;
+  boosting: boolean;
   impulseX: number;
   impulseY: number;
   dirX: number;
@@ -48,6 +49,12 @@ export type PointerState = {
   active: boolean;
 };
 
+export type PlayerProfile = {
+  owner: string;
+  name: string;
+  color: string;
+};
+
 export type Leader = {
   name: string;
   score: number;
@@ -59,6 +66,7 @@ export type GameActions = {
   pause: () => void;
   restart: () => void;
   split: () => void;
+  setBoosting: (active: boolean) => void;
 };
 
 export type GameActionsRef = { current: GameActions };
